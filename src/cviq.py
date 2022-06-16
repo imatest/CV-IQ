@@ -2,20 +2,37 @@
 # This example creates a set of augmented images that can be analyzed for how well they can be used for image 
 import numpy as np
 from wand.image import Image
-from pgmagick.api import PmagickImage
+from pgmagick import Image as PmagickImage
+import pgmagick
+import subprocess
 import cv2
 import sys
 import os
 import pytesseract
 
-
-
 root = '.'
 reference_source = 'Reference-Images'
 augmented_output = 'Augmented-Images'
 output_prefix = 'output_image'
+
+
+# Montage of images containing all target types
+
+montage_reference = 'montage.png'
 def prepare_montage():
-    images = [facial_reference, ]
+    images = [facial_reference, esfriso_reference, text_reference, qrcode_reference]
+    full_path = [reference_source+os.sep+image for image in images]
+    montage_output_file = augmented_output + os.sep  +montage_reference
+    montage_command = "montage -tile 2x2 -geometry 100% " + " ".join(full_path) + " " +montage_output_file
+    subprocess.call(montage_command)
+
+
+    if os.path.exists(montage_output_file):
+        montage_image = cv2.imread(montage_output_file)
+        cv2.imshow('image', montage_image)
+        cv2.waitKey(0)
+    else:
+        raise Exception("Montage command failed to generate file")
     return
 
 
@@ -52,7 +69,7 @@ def image_simulation():
 
 def image_analysis(filename):
     print("Performing analysis of " + filename)
-    
+
 
 
 # Facial recognition using OpenCV HAARCascade
@@ -120,9 +137,9 @@ def main():
     #image_simulation()
     #facial_recognition()
     #print(text_recognition())
-    data, bbox, straight_qrcode = qrcode_recognition()
-    print(data)
-
+    #data, bbox, straight_qrcode = qrcode_recognition()
+    #print(data)
+    prepare_montage()
 
 
 main()
