@@ -58,7 +58,7 @@ def prepare_montage():
 # Image simulation using wand-python, with image quality analysis by Imatest
 # See https://wand-py.org/ https://imatest.com/
 
-imatest_enabled=0
+imatest_enabled=1
 
 def image_simulation():
     
@@ -67,8 +67,8 @@ def image_simulation():
     if imatest_enabled:
         simulations.append({'type':'imatest', 'image_file':imatest_reference, 'analysis':iq_analysis})
     simulations.append(    {'type':'facial',  'image_file':facial_reference,  'analysis':facial_recognition})
-    #simulations.append(    {'type':'qrcode',  'image_file':qrcode_reference,  'analysis':qrcode_recognition})
-    #simulations.append(    {'type':'text',    'image_file':text_reference,    'analysis':text_recognition})
+    simulations.append(    {'type':'qrcode',  'image_file':qrcode_reference,  'analysis':qrcode_recognition})
+    simulations.append(    {'type':'text',    'image_file':text_reference,    'analysis':text_recognition})
  
     output = {}
     arbitrary_noise_levels = np.arange(0.0,1.1,0.1)
@@ -178,32 +178,30 @@ def image_simulation():
 
         #surface_plot_data(X, Y, np.array(face_data), xlabel="")
         if simulation['type'] == 'facial':
-            surface_plot_data(X, Y, np.array(face_data), title="Faces Found", xlabel=X_label, ylabel=Y_label)
+            surface_plot_data(X, Y, np.array(face_data), title="Faces Found", xlabel=X_label, ylabel=Y_label, azimuth=-123)
         elif simulation['type'] == 'imatest':           # Use arbitrary units for ploting to see relation between arbitrary and objective
-            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="SNR", xlabel=X_label, ylabel=Y_label)
-            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="MTF50 C/P", xlabel=X_label, ylabel=Y_label)
+            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="Imatest SNR", xlabel=X_label, ylabel=Y_label)
+            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="Imatest SFR MTF50 C/P", xlabel=X_label, ylabel=Y_label)
         elif simulation['type'] == 'qrcode':
-            surface_plot_data(X, Y, np.array(qrcode_data), title="QR Code Recongnition Success", xlabel=X_label, ylabel=Y_label)
+            surface_plot_data(X, Y, np.array(qrcode_data), title="QR Code Recongnition Success", xlabel=X_label, ylabel=Y_label, azimuth=-123)
         elif simulation['type'] == 'text':
-            surface_plot_data(X, Y, np.array(text_data), title="Text Identification Success", xlabel=X_label, ylabel=Y_label)
-        plt.waitforbuttonpress()
+            surface_plot_data(X, Y, np.array(text_data), title="Text Identification Success", xlabel=X_label, ylabel=Y_label, azimuth=-123)
+    
+    plt.waitforbuttonpress()
             
 
 
-def surface_plot_data(X, Y, Z, *, title="", xlabel="", ylabel=""):
+def surface_plot_data(X, Y, Z, *, title="", xlabel="", ylabel="", azimuth=45, elevation=20):
     fig=plt.figure()
-    ax = Axes3D(fig)
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    ax.view_init(azim=45, elev=20)
-    surf = ax.plot_surface(X, Y, Z, cmap=cm.jet,linewidth=0.1, antialiased=True)
-    fig.tight_layout()
-    fig.colorbar(surf, shrink=0.5, aspect=5)
+    ax = plt.axes(projection='3d')
+    ax.plot_surface(X, Y, Z, cmap=cm.jet,linewidth=0.1, antialiased=True)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.view_init(azim=azimuth, elev=elevation)
     
     plt.savefig(os.path.join(root,plot_output,title.replace(" ","_").replace("/","P")+".png"))
     plt.show()
-    return surf
 
 # Facial recognition using OpenCV HAARCascade
 # see https://medium.com/geeky-bawa/face-detection-using-haar-cascade-classifier-in-python-using-opencv-97873fbf24ec for details
@@ -252,8 +250,6 @@ def text_recognition(text_image):
     # Custom Text Recognition config
     #custom_config = r'--oem 3 --psm 6'
     img=cv2.imread(text_image)
-    #cv2.imshow("text found", img)
-    #cv2.waitKey(0)
     text_recognized = pytesseract.image_to_string(img) #, config=custom_config)
     # remove linefeeds
     text_recognized = text_recognized.replace('\n','')
