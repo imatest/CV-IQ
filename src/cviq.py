@@ -3,25 +3,35 @@
 import numpy as np                     # https://numpy.org/
 from wand.image import Image           # Wand imagemagic python https://docs.wand-py.org/en/0.6.7/
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import cv2                             # OpenCV-python https://pypi.org/project/opencv-python/
 import pytesseract                     # OCR engine https://pypi.org/project/pytesseract/
-from imatest.it import ImatestLibrary  # Imatest IT https://www.imatest.com/docs/imatest-it-instructions/#Python for instructions on Imatest IT
+import difflib
+from imatest.it import ImatestLibrary, ImatestException  # Imatest IT https://www.imatest.com/docs/imatest-it-instructions/#Python for instructions on Imatest IT
 import sys
 import subprocess                      # for calling ImageMagick
 import os
 import json
+from mpl_toolkits.mplot3d import Axes3D
 
-imatestLib = ImatestLibrary()
 root = '.'
 reference_source = 'Reference-Images'
 augmented_output = 'Augmented-Images'
 output_prefix = 'output_image'
-esfriso_reference = 'esfriso.png'
+plot_output = "Plot-Output"
+imatestLib = []
 
 # Main Function
 def main():
-    prepare_montage()
+    global imatestLib
+    if imatest_enabled:
+        imatestLib = ImatestLibrary()
+
+    #prepare_montage()
     image_simulation()
+    if imatest_enabled:
+        imatestLib.terminate_library()
+
 
 
 # Montage of images containing all target types, using imagemagick's montage command line tool
@@ -30,7 +40,7 @@ def main():
 
 montage_reference = 'montage.png'
 def prepare_montage():
-    images = [facial_reference, esfriso_reference, text_reference, qrcode_reference]
+    images = [facial_reference, imatest_reference, text_reference, qrcode_reference]
     full_path = [reference_source+os.sep+image for image in images]
     montage_output_file = augmented_output + os.sep  +montage_reference
     montage_command = "montage -tile 2x2 -geometry 100% " + " ".join(full_path) + " " +montage_output_file
@@ -45,63 +55,162 @@ def prepare_montage():
     return
 
 
-# Image simulation using wand-python
-# See https://wand-py.org/
+# Image simulation using wand-python, with image quality analysis by Imatest
+# See https://wand-py.org/ https://imatest.com/
+
+imatest_enabled=0
 
 def image_simulation():
-    image_file = os.path.join(root,augmented_output,montage_reference)
+    
+    montage_image_file = os.path.join(root,augmented_output,montage_reference)
+    simulations=[]
+    if imatest_enabled:
+        simulations.append({'type':'imatest', 'image_file':imatest_reference, 'analysis':iq_analysis})
+    simulations.append(    {'type':'facial',  'image_file':facial_reference,  'analysis':facial_recognition})
+    #simulations.append(    {'type':'qrcode',  'image_file':qrcode_reference,  'analysis':qrcode_recognition})
+    #simulations.append(    {'type':'text',    'image_file':text_reference,    'analysis':text_recognition})
+ 
+    output = {}
+    arbitrary_noise_levels = np.arange(0.0,1.1,0.1)
+    arbitrary_blur_levels = np.arange(0.0,5.0,0.5)
+    objective_noise_levels = []
+    objective_blur_levels = []
 
-    # Iterate through different levels of blur
-    for blur in np.arange(0.0,7.0,1.0):
-        img = Image(filename=image_file)
-        blur_img = img
-        blur_img.blur(radius=0,sigma=blur)
+    # create folders for output
+    for simulation in simulations:
+        output_folder = os.path.join(root,augmented_output,simulation['type'])
+        if not os.path.exists(output_folder):
+            os.mkdir(output_folder)
 
-        # Iterate through different levels of noise
-        for noise in np.arange(0.0,1.4,0.2):
-            noise = np.around(noise, decimals=1)
-            noise_img=blur_img
-            noise_img.noise(noise_type='gaussian', attenuate=noise)
+        output[simulation['type']] = {}
+
+        if simulation['type'] == 'facial':
+            face_data = []
+        if simulation['type'] == 'qrcode':
+            qrcode_data = []
+        if simulation['type'] == 'text':
+            text_data = []
+        elif simulation['type'] == 'imatest':
+            snr_data = []
+            mtf_data = []
+
+        # Iterate through different levels of blur
+        blur_index = 1
+        for blur in arbitrary_blur_levels:
+            output[simulation['type']][blur] = {}
+            simulation_image = Image(filename=os.path.join(root, reference_source, simulation['image_file']))
+            simulation_image.blur(radius=0,sigma=blur)
+
+            if simulation['type'] == 'facial':
+                face_row = []
+            elif simulation['type'] == 'qrcode':
+                qrcode_row = []
+            elif simulation['type'] == 'text':
+                text_row = []
+            elif simulation['type'] == 'imatest':
+                snr_row = []
+                mtf_row = []
+
+            # Iterate through different levels of noise
+            noise_index = 1
+            for noise in arbitrary_noise_levels:
+                output[simulation['type']][blur][noise] = {}
+                noise = np.around(noise, decimals=1)
+                noise_img=simulation_image
+                noise_img.noise(noise_type='gaussian', attenuate=noise)
+            
+                output_file = simulation['type'] + '_noise' + str(noise) +'_blur' + str(blur) + '.png'
+
+                # Output the blurred/noisy image
+                output_filename=os.path.join(output_folder,output_file)
+                noise_img.save(filename=output_filename)
+
+                # 
+                analysis_output = (simulation['analysis'])(output_filename)
+                output[simulation['type']][blur][noise] = analysis_output
+
+                if simulation['type'] == 'facial':
+                    face_row.append(analysis_output)
+                if simulation['type'] == 'qrcode':
+                    qrcode_row.append(analysis_output)
+                if simulation['type'] == 'text':
+                    text_row.append(analysis_output)
+                if simulation['type'] == 'imatest':
+                    snr_row.append(analysis_output['snr'])
+                    if analysis_output['mtf50'] == '_NaN_':         # some MTFs came as NAN and should be plotted as 0
+                        sharpness_metric = 0
+                        print('WARNING: NaN in sfr calc from ' + output_filename)
+                    else:
+                        sharpness_metric = analysis_output['mtf50']    # Choice of MTF50 is arbitrary, other sharpness metrics could correlate better with particular items
+                    mtf_row.append(sharpness_metric)
+                    if noise_index == 1:
+                        objective_blur_levels.append(sharpness_metric)
+                noise_index += 1
+            
+
+            if simulation['type'] == 'facial':
+                face_data.append(face_row)
+            if simulation['type'] == 'qrcode':
+                qrcode_data.append(qrcode_row)
+            if simulation['type'] == 'text':
+                text_data.append(text_row)
+            elif simulation['type'] == 'imatest':
+                snr_data.append(snr_row)
+                mtf_data.append(mtf_row)
+                if blur_index == 1:             # use first row of unblured noise simulations for SNR axis
+                    objective_noise_levels = snr_row
+                
+            blur_index += 1
+                
+        X_arbitrary, Y_arbitrary = np.meshgrid(arbitrary_noise_levels, arbitrary_blur_levels)
         
-            output_file = output_prefix + '_noise' + str(noise) +'_blur' + str(blur) + '.png'
+        if imatest_enabled:         # key into SNR and MTF50 as key axes if we can calcualte it with Imatest
+            X_objective, Y_objective = np.meshgrid(objective_noise_levels, objective_blur_levels)
+            X = X_objective
+            Y = Y_objective
+            X_label = "Mean SNR"
+            Y_label = "MTF50 Cycles/Pixel"
+        else:                       # without objective image quality analysis we are made to depend on arbitrary values
+            X = X_arbitrary
+            Y = Y_arbitrary
+            X_label = "Noise level"
+            Y_label = "Blur level"
 
-            # Output the blurred/noisy image
-            output_filename=os.path.join(augmented_output,output_file)
-            blur_img.save(filename=output_filename)
+        #surface_plot_data(X, Y, np.array(face_data), xlabel="")
+        if simulation['type'] == 'facial':
+            surface_plot_data(X, Y, np.array(face_data), title="Faces Found", xlabel=X_label, ylabel=Y_label)
+        elif simulation['type'] == 'imatest':           # Use arbitrary units for ploting to see relation between arbitrary and objective
+            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="SNR", xlabel=X_label, ylabel=Y_label)
+            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="MTF50 C/P", xlabel=X_label, ylabel=Y_label)
+        elif simulation['type'] == 'qrcode':
+            surface_plot_data(X, Y, np.array(qrcode_data), title="QR Code Recongnition Success", xlabel=X_label, ylabel=Y_label)
+        elif simulation['type'] == 'text':
+            surface_plot_data(X, Y, np.array(text_data), title="Text Identification Success", xlabel=X_label, ylabel=Y_label)
+        plt.waitforbuttonpress()
+            
 
-            analysis = image_analysis(output_filename)
 
+def surface_plot_data(X, Y, Z, *, title="", xlabel="", ylabel=""):
+    fig=plt.figure()
+    ax = Axes3D(fig)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    ax.view_init(azim=45, elev=20)
+    surf = ax.plot_surface(X, Y, Z, cmap=cm.jet,linewidth=0.1, antialiased=True)
+    fig.tight_layout()
+    fig.colorbar(surf, shrink=0.5, aspect=5)
     
-# Analysis function
-def image_analysis(filename):
-    print("Performing analysis of " + filename)
-    
-    # IQ Analysis
-    iq_analysis(filename)
-
-    # Facial
-    facial_recognition(filename)
-
-    # QR code
-    qrcode_recognition(filename)
-
-    # Text 
-    text_recognition(filename)
-
-
-    
-
-
-    
-
-
+    plt.savefig(os.path.join(root,plot_output,title.replace(" ","_").replace("/","P")+".png"))
+    plt.show()
+    return surf
 
 # Facial recognition using OpenCV HAARCascade
 # see https://medium.com/geeky-bawa/face-detection-using-haar-cascade-classifier-in-python-using-opencv-97873fbf24ec for details
 
-
-facial_reference = 'faces_in_croud.jpg'
-facial_cascPath = "haarcascade_frontalface_default.xml"
+# Faical reference selected from a crop of Croud by Paul Sableman https://www.flickr.com/photos/pasa/17412732639
+facial_reference = 'Paul_Sableman_Crowd.png'
+facial_cascPath = os.path.join("haarcascades","haarcascade_frontalface_alt.xml")
 facial_debug = 0
 
 def facial_recognition(faces_image):
@@ -131,11 +240,12 @@ def facial_recognition(faces_image):
 
     return len(faces)
 
-
+########
 # Text recoggnition using PYTesseract
+#
 
 text_reference = 'eye_chart.jpg'
-text_correct = 'ZSHCHSKRNCHKRVDHONSDCVOKHDNRCSBDCLKZVHSROAHKGBCANOMPVESRPKUEOBTVXRMJHCAZDI'
+text_extremely_correct = 'ZSHCHSKRNCHKRVDHONSDCVOKHDNRCSVHDNKUOSRCBDCLKZVHSROAHKGBCANOMPVESR'
 
 def text_recognition(text_image):
     #text_image = os.path.join(reference_source, text_reference)
@@ -144,25 +254,30 @@ def text_recognition(text_image):
     img=cv2.imread(text_image)
     #cv2.imshow("text found", img)
     #cv2.waitKey(0)
-    output = pytesseract.image_to_string(img) #, config=custom_config)
+    text_recognized = pytesseract.image_to_string(img) #, config=custom_config)
     # remove linefeeds
-    output = output.replace('\n','')
-    if output == '':
+    text_recognized = text_recognized.replace('\n','')
+    if text_recognized == '':
         print("No text found")
-        return 0
-    elif output == text_correct:
-        print("Text correctly identified")
-        return len(text_correct)
+        success= 0
     else:
-        length_delta = len(output) - len(text_correct)
-        print("Text misidentified,  " + str(length_delta) + " character delta")
-        return len(output)
+        success = text_accuracy(text_recognized,text_extremely_correct)
+        print("Accuracy " + str(success) + ": \"" + text_recognized + "\"")
     #return [data, bbox, straight_qrcode]
+    return success
 
-    return output
+def text_accuracy(s1,s2):
+    s = difflib.SequenceMatcher(None,s1,s2)
+    matched = 0
+    for block in s.get_matching_blocks():
+        matched += block.size
 
+    return matched
+
+
+########
 # QR Code Recognition with OpenCV
-
+#
 qrcode_reference = 'qrcode.jpg'
 qrcode_url = 'https://www.imatest.com/'
 
@@ -175,32 +290,69 @@ def qrcode_recognition(qrcode_image):
     data, bbox, straight_qrcode = detector.detectAndDecode(img)
     if data == '':
         print("QR code not found!")
+        output = 0.0
     elif data == qrcode_url:
         print("QR code correctly identified")
+        output = 1.0
     else:
         print("QR code misidentified as " + data)
-    return [data, bbox, straight_qrcode]
+        output = 0.25
+    
+    return output
+    #return [data, bbox, straight_qrcode]
 
 
-ini_file="imatest-v2.ini"
-mean_part_way_idx =2
-noise_metric = "SNR_BW_dB_RGBY"
-R_channel = 0
-G_channel = 1
-B_channel = 2
+
+########
+# IQ Analysis with Imatest
+#
+imatest_reference = 'esfriso.png'
+max_snr = 50   # to prevent noise-free images from scoring too high we put a cap on SNR
 
 def iq_analysis(filename):
-    result = imatestLib.esfriso(input_file=filename,
-                            root_dir=root,
-                            op_mode=ImatestLibrary.OP_MODE_SEPARATE,
-                            ini_file=ini_file)
-    data = json.loads(result)
-    mtf50_CP = data['esfrisoResults']['mtf50_CP_summary'][mean_part_way_idx]
-    R_snr = data['esfrisoResults'][noise_metric][R_channel]
-    G_snr = data['esfrisoResults'][noise_metric][G_channel]
-    B_snr = data['esfrisoResults'][noise_metric][B_channel]
-    SNR_mean = (R_snr + G_snr + B_snr) /3
-    print("IQ Data:  MTF50 " + str(mtf50_CP) + " C/P, SNR: " + str(SNR_mean))
-    
+    global imatestLib
+    ini_file=os.path.join(root, r"imatest-v2.ini")
+    noise_metric = "SNR_BW_dB_RGBY"
+    R_channel = 0
+    G_channel = 1
+    B_channel = 2
 
+    # normally we would call esfriso instead, but since this must work with high amounts of degredation we are using sfr and stepchart that have manual region selections
+    sfr_data = imatest_analysis(imatestLib.sfr_json, filename, ini_file)
+
+    # we pull the mtf50 from the first slanted edge as our sharpness metric
+    mtf50_CP = sfr_data['sfrResults']['mtf50'][0]
+
+    stepchart_data = imatest_analysis(imatestLib.stepchart_json, filename, ini_file)
+    # we pull mean SNR_BW from red,green,blue as our noise metric
+    SNR_mean = (stepchart_data['stepchartResults'][noise_metric][R_channel] + 
+                stepchart_data['stepchartResults'][noise_metric][G_channel] + 
+                stepchart_data['stepchartResults'][noise_metric][B_channel] ) / 3
+    SNR_mean = min(SNR_mean, max_snr)
+
+    print("IQ Data:  MTF50 " + str(mtf50_CP) + " C/P, SNR: " + str(SNR_mean))
+    return {'mtf50':mtf50_CP, 'snr':SNR_mean}
+    
+# This function calls an Imatest IT library function module (run) on a specified image with associated ini settings
+def imatest_analysis(run, image, ini_file):
+    try:
+        result = (run)(input_file=image,
+                                root_dir=root,
+                                op_mode=ImatestLibrary.OP_MODE_SEPARATE,
+                                ini_file=ini_file)
+    except ImatestException as iex:
+        if iex.error_id == ImatestException.FloatingLicenseException:
+            print("All floating license seats are in use.  Exit Imatest on another computer and try again.")
+        elif iex.error_id == ImatestException.LicenseException:
+            print("License Exception: " + iex.message)
+        else:
+            print(iex.message)
+        exit_code = iex.error_id
+    except Exception as ex:
+        print(str(ex))
+        exit_code = 2
+    data = json.loads(result)
+    return data
+
+# Run the main function
 main()

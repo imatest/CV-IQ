@@ -1,0 +1,3 @@
+File ,Date/time ,ROI Ch,H/V,R1090,R1090_C,Over-,Over-,MTF50,MTF50P,MTF,Camera,Lens,FL,f-stop,Location,ISO,Misc.,Gamma, ,Chr Aber,Secondary,,Secondary,,EdgeRough,Shutter,Edge,Dark,Light,Under-
+,,,,Pixels,Pixels,shoot %,sharpng %,Cy/Pxl,Cy/Pxl,Nyq,,,(mm),,Pxls,speed,settings,, ,area pxls,Readout 1,,Readout 2,,Pxls,Speed,Angle,region,region,shoot %
+esfriso.png,2022-06-20 13:42:25,1 Y,Horiz (V-edge), 0.89,  NaN,  0.0, -3.4,0.6034,0.6034,0.6359,,, ,,6.7% left of ctr,,,0.500,  NaN, 0.00,MTF30,0.75664,,,,,  4.909, 0.3882, 0.7294,  0.0
