@@ -163,6 +163,8 @@ def image_simulation():
             blur_index += 1
                 
         X_arbitrary, Y_arbitrary = np.meshgrid(arbitrary_noise_levels, arbitrary_blur_levels)
+        X_label_arbitrary = "Noise level"
+        Y_label_arbitrary = "Blur level"
         
         if imatest_enabled:         # key into SNR and MTF50 as key axes if we can calcualte it with Imatest
             X_objective, Y_objective = np.meshgrid(objective_noise_levels, objective_blur_levels)
@@ -173,15 +175,15 @@ def image_simulation():
         else:                       # without objective image quality analysis we are made to depend on arbitrary values
             X = X_arbitrary
             Y = Y_arbitrary
-            X_label = "Noise level"
-            Y_label = "Blur level"
+            X_label = X_label_arbitrary
+            Y_label = Y_label_arbitrary
 
         #surface_plot_data(X, Y, np.array(face_data), xlabel="")
         if simulation['type'] == 'facial':
             surface_plot_data(X, Y, np.array(face_data), title="Faces Found", xlabel=X_label, ylabel=Y_label, azimuth=-123)
         elif simulation['type'] == 'imatest':           # Use arbitrary units for ploting to see relation between arbitrary and objective
-            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="Imatest SNR", xlabel=X_label, ylabel=Y_label)
-            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="Imatest SFR MTF50 C/P", xlabel=X_label, ylabel=Y_label)
+            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="Imatest SNR", xlabel=X_label_arbitrary, ylabel=Y_label_arbitrary)
+            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="Imatest SFR MTF50 C/P", xlabel=X_label_arbitrary, ylabel=Y_label_arbitrary)
         elif simulation['type'] == 'qrcode':
             surface_plot_data(X, Y, np.array(qrcode_data), title="QR Code Recongnition Success", xlabel=X_label, ylabel=Y_label, azimuth=-123)
         elif simulation['type'] == 'text':
