@@ -24,12 +24,12 @@ imatestLib = []
 # Main Function
 def main():
     global imatestLib
-    if imatest_enabled:
+    if imatest_analysis_enabled:
         imatestLib = ImatestLibrary()
 
     #prepare_montage()
     image_simulation()
-    if imatest_enabled:
+    if imatest_analysis_enabled:
         imatestLib.terminate_library()
 
 
@@ -59,16 +59,26 @@ def prepare_montage():
 # See https://wand-py.org/ https://imatest.com/
 
 imatest_enabled=1
+imatest_analysis_enabled=0
+facial_enabled=0
+qrcode_enabled=0
+text_enabled=0
 
 def image_simulation():
     
     montage_image_file = os.path.join(root,augmented_output,montage_reference)
     simulations=[]
     if imatest_enabled:
-        simulations.append({'type':'imatest', 'image_file':imatest_reference, 'analysis':iq_analysis})
-    simulations.append(    {'type':'facial',  'image_file':facial_reference,  'analysis':facial_recognition})
-    simulations.append(    {'type':'qrcode',  'image_file':qrcode_reference,  'analysis':qrcode_recognition})
-    simulations.append(    {'type':'text',    'image_file':text_reference,    'analysis':text_recognition})
+        if imatest_analysis_enabled:
+            simulations.append({'type':'imatest', 'image_file':imatest_reference, 'analysis':iq_analysis})
+        else:
+            simulations.append({'type':'imatest', 'image_file':imatest_reference})
+    if facial_enabled:
+        simulations.append(    {'type':'facial',  'image_file':facial_reference,  'analysis':facial_recognition})
+    if qrcode_enabled:
+        simulations.append(    {'type':'qrcode',  'image_file':qrcode_reference,  'analysis':qrcode_recognition})
+    if text_enabled:
+        simulations.append(    {'type':'text',    'image_file':text_reference,    'analysis':text_recognition})
  
     output = {}
     arbitrary_noise_levels = np.arange(0.0,1.1,0.1)
@@ -126,25 +136,27 @@ def image_simulation():
                 noise_img.save(filename=output_filename)
 
                 # 
-                analysis_output = (simulation['analysis'])(output_filename)
-                output[simulation['type']][blur][noise] = analysis_output
+                if "analysis" in simulation:
+                    analysis_output = (simulation['analysis'])(output_filename)
 
-                if simulation['type'] == 'facial':
-                    face_row.append(analysis_output)
-                if simulation['type'] == 'qrcode':
-                    qrcode_row.append(analysis_output)
-                if simulation['type'] == 'text':
-                    text_row.append(analysis_output)
-                if simulation['type'] == 'imatest':
-                    snr_row.append(analysis_output['snr'])
-                    if analysis_output['mtf50'] == '_NaN_':         # some MTFs came as NAN and should be plotted as 0
-                        sharpness_metric = 0
-                        print('WARNING: NaN in sfr calc from ' + output_filename)
-                    else:
-                        sharpness_metric = analysis_output['mtf50']    # Choice of MTF50 is arbitrary, other sharpness metrics could correlate better with particular items
-                    mtf_row.append(sharpness_metric)
-                    if noise_index == 1:
-                        objective_blur_levels.append(sharpness_metric)
+                    output[simulation['type']][blur][noise] = analysis_output
+
+                    if simulation['type'] == 'facial':
+                        face_row.append(analysis_output)
+                    if simulation['type'] == 'qrcode':
+                        qrcode_row.append(analysis_output)
+                    if simulation['type'] == 'text':
+                        text_row.append(analysis_output)
+                    if simulation['type'] == 'imatest':
+                        snr_row.append(analysis_output['snr'])
+                        if analysis_output['mtf50'] == '_NaN_':         # some MTFs came as NAN and should be plotted as 0
+                            sharpness_metric = 0
+                            print('WARNING: NaN in sfr calc from ' + output_filename)
+                        else:
+                            sharpness_metric = analysis_output['mtf50']    # Choice of MTF50 is arbitrary, other sharpness metrics could correlate better with particular items
+                        mtf_row.append(sharpness_metric)
+                        if noise_index == 1:
+                            objective_blur_levels.append(sharpness_metric)
                 noise_index += 1
             
 
@@ -182,8 +194,9 @@ def image_simulation():
         if simulation['type'] == 'facial':
             surface_plot_data(X, Y, np.array(face_data), title="Faces Found", xlabel=X_label, ylabel=Y_label, azimuth=-123)
         elif simulation['type'] == 'imatest':           # Use arbitrary units for ploting to see relation between arbitrary and objective
-            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="Imatest SNR", xlabel=X_label_arbitrary, ylabel=Y_label_arbitrary)
-            surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="Imatest SFR MTF50 C/P", xlabel=X_label_arbitrary, ylabel=Y_label_arbitrary)
+            if imatest_analysis_enabled:
+                surface_plot_data(X_arbitrary, Y_arbitrary, np.array(snr_data), title="Imatest SNR", xlabel=X_label_arbitrary, ylabel=Y_label_arbitrary)
+                surface_plot_data(X_arbitrary, Y_arbitrary, np.array(mtf_data), title="Imatest SFR MTF50 C/P", xlabel=X_label_arbitrary, ylabel=Y_label_arbitrary)
         elif simulation['type'] == 'qrcode':
             surface_plot_data(X, Y, np.array(qrcode_data), title="QR Code Recongnition Success", xlabel=X_label, ylabel=Y_label, azimuth=-123)
         elif simulation['type'] == 'text':
