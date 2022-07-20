@@ -59,10 +59,10 @@ def prepare_montage():
 # See https://wand-py.org/ https://imatest.com/
 
 imatest_enabled=1
-imatest_analysis_enabled=0
-facial_enabled=0
-qrcode_enabled=0
-text_enabled=0
+imatest_analysis_enabled=1
+facial_enabled=1
+qrcode_enabled=1
+text_enabled=1
 
 def image_simulation():
     
