@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"name": "CV-IQ-Quality",
+			"path": "."
+		},
+		{
+			"path": "..\\..\\..\\..\\Program Files\\Imatest\\v22.1\\IT\\samples\\python"
+		}
+	],
+	"settings": {}
+}
